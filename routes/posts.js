@@ -295,25 +295,29 @@ router.put("/:id/like", auth, async (req, res) => {
       // No reaction yet → add
       post.reactions.push({ user: req.userId, type: reactionType });
       if (post.author.toString() !== req.userId) {
-        await Notification.create({
-          recipient: post.author,
-          sender: req.userId,
-          type: "like_post",
-          reference: post._id,
-          referenceModel: "Post",
-        });
-        const io = req.app.get("io");
-        const onlineUsers = req.app.get("onlineUsers");
-        const recipientSocket = onlineUsers?.get(post.author.toString());
-        if (recipientSocket) {
-          const notif = await Notification.findOne({
+        // Upsert to avoid duplicate notifications from the same user on the same post
+        const notif = await Notification.findOneAndUpdate(
+          {
             recipient: post.author,
             sender: req.userId,
             type: "like_post",
             reference: post._id,
-          })
-            .sort({ createdAt: -1 })
-            .populate("sender", "firstName lastName profilePicture");
+          },
+          {
+            recipient: post.author,
+            sender: req.userId,
+            type: "like_post",
+            reference: post._id,
+            referenceModel: "Post",
+            read: false,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        const io = req.app.get("io");
+        const onlineUsers = req.app.get("onlineUsers");
+        const recipientSocket = onlineUsers?.get(post.author.toString());
+        if (recipientSocket) {
+          await notif.populate("sender", "firstName lastName profilePicture");
           io.to(recipientSocket).emit("notification", notif);
         }
       }
