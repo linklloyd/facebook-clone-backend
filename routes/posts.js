@@ -105,8 +105,27 @@ router.post("/", auth, upload.array("media", 10), async (req, res) => {
       const firstImageIdx = postData.mediaTypes.indexOf("image");
       if (firstImageIdx >= 0) postData.image = postData.images[firstImageIdx];
     }
-    if (!postData.text && (!postData.images || postData.images.length === 0)) {
-      return res.status(400).json({ message: "Post must have text or media" });
+    // Handle poll data
+    if (req.body.pollQuestion) {
+      let pollOptions = [];
+      try { pollOptions = JSON.parse(req.body.pollOptions || "[]"); } catch (_) {}
+      if (pollOptions.length >= 2) {
+        postData.poll = {
+          question: req.body.pollQuestion,
+          options: pollOptions.map((text) => ({ text, votes: [] })),
+          multipleChoice: req.body.pollMultiple === "true",
+        };
+        if (req.body.pollDuration) {
+          const hours = parseInt(req.body.pollDuration);
+          if (hours > 0) {
+            postData.poll.endsAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+          }
+        }
+      }
+    }
+
+    if (!postData.text && (!postData.images || postData.images.length === 0) && !postData.poll?.question) {
+      return res.status(400).json({ message: "Post must have text, media, or a poll" });
     }
     // Parse mentions
     const mentionIds = parseMentions(postData.text);
@@ -131,7 +150,8 @@ router.get("/single/:id", auth, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
       .populate("author", "firstName lastName profilePicture")
-      .populate("reactions.user", "firstName lastName");
+      .populate("reactions.user", "firstName lastName")
+      .populate("poll.options.votes", "firstName lastName profilePicture");
     if (!post) return res.status(404).json({ message: "Post not found" });
 
     const comments = await Comment.find({ post: post._id })
@@ -166,7 +186,8 @@ router.get("/feed", auth, async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .populate("author", "firstName lastName profilePicture")
-      .populate("reactions.user", "firstName lastName");
+      .populate("reactions.user", "firstName lastName")
+      .populate("poll.options.votes", "firstName lastName profilePicture");
 
     const postIds = posts.map((p) => p._id);
     const comments = await Comment.find({ post: { $in: postIds } })
@@ -212,7 +233,8 @@ router.get("/user/:userId", auth, async (req, res) => {
     const posts = await Post.find({ author: req.params.userId })
       .sort({ createdAt: -1 })
       .populate("author", "firstName lastName profilePicture")
-      .populate("reactions.user", "firstName lastName");
+      .populate("reactions.user", "firstName lastName")
+      .populate("poll.options.votes", "firstName lastName profilePicture");
 
     const postIds = posts.map((p) => p._id);
     const comments = await Comment.find({ post: { $in: postIds } })
@@ -466,6 +488,58 @@ router.delete("/:postId/comments/:commentId", auth, async (req, res) => {
     await Comment.deleteMany({ parentComment: req.params.commentId });
     await comment.deleteOne();
     res.json({ message: "Comment deleted" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Vote on poll
+router.put("/:id/poll/vote", auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post || !post.poll?.question) {
+      return res.status(404).json({ message: "Poll not found" });
+    }
+
+    // Check if poll has expired
+    if (post.poll.endsAt && new Date() > post.poll.endsAt) {
+      return res.status(400).json({ message: "Poll has ended" });
+    }
+
+    // Only friends of the author + the author can vote
+    const author = await User.findById(post.author);
+    const isFriend = author.friends.some((f) => f.toString() === req.userId);
+    const isAuthor = post.author.toString() === req.userId;
+    if (!isFriend && !isAuthor) {
+      return res.status(403).json({ message: "Only friends can vote on this poll" });
+    }
+
+    const { optionIndex } = req.body;
+    if (optionIndex === undefined || !post.poll.options[optionIndex]) {
+      return res.status(400).json({ message: "Invalid option" });
+    }
+
+    if (!post.poll.multipleChoice) {
+      // Remove any previous vote from this user (single choice)
+      post.poll.options.forEach((opt) => {
+        opt.votes = opt.votes.filter((v) => v.toString() !== req.userId);
+      });
+    }
+
+    const option = post.poll.options[optionIndex];
+    const alreadyVoted = option.votes.some((v) => v.toString() === req.userId);
+    if (alreadyVoted) {
+      // Toggle off
+      option.votes = option.votes.filter((v) => v.toString() !== req.userId);
+    } else {
+      option.votes.push(req.userId);
+    }
+
+    await post.save();
+    await post.populate("author", "firstName lastName profilePicture");
+    await post.populate("reactions.user", "firstName lastName");
+    await post.populate("poll.options.votes", "firstName lastName profilePicture");
+    res.json(post);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

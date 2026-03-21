@@ -25,6 +25,18 @@ const postSchema = new mongoose.Schema(
     feeling: { type: String, default: "" },
     mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     pinned: { type: Boolean, default: false },
+    // Poll fields
+    poll: {
+      question: { type: String, default: "" },
+      options: [
+        {
+          text: { type: String },
+          votes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+        },
+      ],
+      endsAt: { type: Date },
+      multipleChoice: { type: Boolean, default: false },
+    },
   },
   { timestamps: true }
 );
