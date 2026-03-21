@@ -188,7 +188,7 @@ router.post("/friend-request/:id", auth, async (req, res) => {
       receiver: req.params.id,
     });
 
-    await Notification.create({
+    const notif = await Notification.create({
       recipient: req.params.id,
       sender: req.userId,
       type: "friend_request",
@@ -200,12 +200,8 @@ router.post("/friend-request/:id", auth, async (req, res) => {
     const onlineUsers = req.app.get("onlineUsers");
     const receiverSocketId = onlineUsers?.get(req.params.id);
     if (receiverSocketId) {
-      const notification = await Notification.findOne({
-        recipient: req.params.id,
-        sender: req.userId,
-        type: "friend_request",
-      }).populate("sender", "firstName lastName profilePicture");
-      io.to(receiverSocketId).emit("notification", notification);
+      await notif.populate("sender", "firstName lastName profilePicture");
+      io.to(receiverSocketId).emit("notification", notif);
     }
 
     res.status(201).json(request);

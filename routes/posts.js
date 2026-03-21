@@ -27,7 +27,7 @@ async function sendMentionNotifs(mentionIds, senderId, postId, type, req) {
   const onlineUsers = req.app.get("onlineUsers");
   for (const recipientId of mentionIds) {
     if (recipientId === senderId) continue;
-    await Notification.create({
+    const notif = await Notification.create({
       recipient: recipientId,
       sender: senderId,
       type,
@@ -36,14 +36,7 @@ async function sendMentionNotifs(mentionIds, senderId, postId, type, req) {
     });
     const recipientSocket = onlineUsers?.get(recipientId);
     if (recipientSocket) {
-      const notif = await Notification.findOne({
-        recipient: recipientId,
-        sender: senderId,
-        type,
-        reference: postId,
-      })
-        .sort({ createdAt: -1 })
-        .populate("sender", "firstName lastName profilePicture");
+      await notif.populate("sender", "firstName lastName profilePicture");
       io.to(recipientSocket).emit("notification", notif);
     }
   }
@@ -349,7 +342,7 @@ router.post("/:id/comments", auth, async (req, res) => {
       // Strip @mentions from preview text
       const rawText = req.body.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1");
       const preview = rawText.length > 80 ? rawText.slice(0, 80) + "..." : rawText;
-      await Notification.create({
+      const notif = await Notification.create({
         recipient: post.author,
         sender: req.userId,
         type: "comment_post",
@@ -361,14 +354,7 @@ router.post("/:id/comments", auth, async (req, res) => {
       const onlineUsers = req.app.get("onlineUsers");
       const recipientSocket = onlineUsers?.get(post.author.toString());
       if (recipientSocket) {
-        const notif = await Notification.findOne({
-          recipient: post.author,
-          sender: req.userId,
-          type: "comment_post",
-          reference: post._id,
-        })
-          .sort({ createdAt: -1 })
-          .populate("sender", "firstName lastName profilePicture");
+        await notif.populate("sender", "firstName lastName profilePicture");
         io.to(recipientSocket).emit("notification", notif);
       }
     }
