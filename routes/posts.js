@@ -133,6 +133,33 @@ router.post("/", auth, upload.array("media", 10), async (req, res) => {
   }
 });
 
+// Get single post by ID
+router.get("/single/:id", auth, async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id)
+      .populate("author", "firstName lastName profilePicture")
+      .populate("reactions.user", "firstName lastName");
+    if (!post) return res.status(404).json({ message: "Post not found" });
+
+    const comments = await Comment.find({ post: post._id })
+      .populate("author", "firstName lastName profilePicture")
+      .populate("reactions.user", "firstName lastName")
+      .sort({ createdAt: 1 });
+
+    const topLevel = comments.filter((c) => !c.parentComment);
+    const withReplies = topLevel.map((c) => ({
+      ...c.toJSON(),
+      replies: comments.filter(
+        (r) => r.parentComment?.toString() === c._id.toString()
+      ),
+    }));
+
+    res.json({ ...post.toJSON(), comments: withReplies });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get news feed (own + friends' posts)
 router.get("/feed", auth, async (req, res) => {
   try {
