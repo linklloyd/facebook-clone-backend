@@ -10,6 +10,15 @@ const storySchema = new mongoose.Schema(
     image: { type: String, default: "" },
     text: { type: String, default: "" },
     backgroundColor: { type: String, default: "#1877f2" },
+    // Customization fields
+    fontFamily: { type: String, default: "sans-serif" },
+    fontSize: { type: Number, default: 28 },
+    fontColor: { type: String, default: "#ffffff" },
+    textAlign: { type: String, enum: ["left", "center", "right"], default: "center" },
+    textPosition: { type: String, enum: ["top", "center", "bottom"], default: "center" },
+    fontWeight: { type: String, enum: ["normal", "bold"], default: "bold" },
+    fontStyle: { type: String, enum: ["normal", "italic"], default: "normal" },
+    gradient: { type: String, default: "" }, // CSS gradient string, overrides backgroundColor
     viewers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     expiresAt: {
       type: Date,

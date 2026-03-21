@@ -14,6 +14,14 @@ router.post("/", auth, upload.single("image"), async (req, res) => {
       author: req.userId,
       text: req.body.text || "",
       backgroundColor: req.body.backgroundColor || "#1877f2",
+      fontFamily: req.body.fontFamily || "sans-serif",
+      fontSize: Number(req.body.fontSize) || 28,
+      fontColor: req.body.fontColor || "#ffffff",
+      textAlign: req.body.textAlign || "center",
+      textPosition: req.body.textPosition || "center",
+      fontWeight: req.body.fontWeight || "bold",
+      fontStyle: req.body.fontStyle || "normal",
+      gradient: req.body.gradient || "",
     };
     if (req.file) {
       storyData.image = await uploadToImgur(req.file.buffer);
