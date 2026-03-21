@@ -202,9 +202,20 @@ router.get("/feed", auth, async (req, res) => {
   }
 });
 
-// Get user's posts
+// Get user's posts (private profiles only show to friends)
 router.get("/user/:userId", auth, async (req, res) => {
   try {
+    const isMe = req.userId === req.params.userId;
+    if (!isMe) {
+      const profileUser = await User.findById(req.params.userId);
+      if (profileUser && !profileUser.isPublicProfile) {
+        const isFriend = profileUser.friends.some(
+          (f) => f.toString() === req.userId
+        );
+        if (!isFriend) return res.json([]);
+      }
+    }
+
     const posts = await Post.find({ author: req.params.userId })
       .sort({ createdAt: -1 })
       .populate("author", "firstName lastName profilePicture")
@@ -331,12 +342,16 @@ router.post("/:id/comments", auth, async (req, res) => {
     });
 
     if (post.author.toString() !== req.userId) {
+      // Strip @mentions from preview text
+      const rawText = req.body.text.replace(/@\[([^\]]+)\]\([^)]+\)/g, "$1");
+      const preview = rawText.length > 80 ? rawText.slice(0, 80) + "..." : rawText;
       await Notification.create({
         recipient: post.author,
         sender: req.userId,
         type: "comment_post",
         reference: post._id,
         referenceModel: "Post",
+        commentPreview: preview,
       });
       const io = req.app.get("io");
       const onlineUsers = req.app.get("onlineUsers");

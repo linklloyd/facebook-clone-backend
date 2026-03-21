@@ -83,6 +83,27 @@ router.get("/:id", auth, async (req, res) => {
       .select("-password")
       .populate("friends", "firstName lastName profilePicture isOnline");
     if (!user) return res.status(404).json({ message: "User not found" });
+
+    const isMe = req.userId === req.params.id;
+    const isFriend = user.friends.some(
+      (f) => (f._id || f).toString() === req.userId
+    );
+
+    // If profile is private and not a friend, return limited info
+    if (!isMe && !user.isPublicProfile && !isFriend) {
+      return res.json({
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profilePicture: user.profilePicture,
+        coverPicture: user.coverPicture,
+        isPublicProfile: user.isPublicProfile,
+        friends: [],
+        friendCount: user.friends.length,
+        isPrivate: true,
+      });
+    }
+
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -92,10 +113,14 @@ router.get("/:id", auth, async (req, res) => {
 // Update profile
 router.put("/", auth, async (req, res) => {
   try {
-    const { bio, city, hometown, workplace, relationship } = req.body;
+    const { bio, city, hometown, workplace, relationship, isPublicProfile } = req.body;
+    const updateData = { bio, city, hometown, workplace, relationship };
+    if (typeof isPublicProfile === "boolean") {
+      updateData.isPublicProfile = isPublicProfile;
+    }
     const user = await User.findByIdAndUpdate(
       req.userId,
-      { bio, city, hometown, workplace, relationship },
+      updateData,
       { new: true }
     )
       .select("-password")

@@ -4,13 +4,27 @@ import auth from "../middleware/auth.js";
 
 const router = Router();
 
-// Get notifications
+const MAX_NOTIFICATIONS = 50;
+
+// Get notifications (capped at MAX_NOTIFICATIONS)
 router.get("/", auth, async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.userId })
       .populate("sender", "firstName lastName profilePicture")
       .sort({ createdAt: -1 })
-      .limit(20);
+      .limit(MAX_NOTIFICATIONS);
+
+    // Cleanup: delete any notifications beyond the cap
+    const count = await Notification.countDocuments({ recipient: req.userId });
+    if (count > MAX_NOTIFICATIONS) {
+      const oldest = await Notification.find({ recipient: req.userId })
+        .sort({ createdAt: -1 })
+        .skip(MAX_NOTIFICATIONS)
+        .select("_id");
+      const idsToDelete = oldest.map((n) => n._id);
+      await Notification.deleteMany({ _id: { $in: idsToDelete } });
+    }
+
     res.json(notifications);
   } catch (err) {
     res.status(500).json({ message: err.message });
