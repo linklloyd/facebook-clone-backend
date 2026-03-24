@@ -113,8 +113,10 @@ router.get("/:id", auth, async (req, res) => {
 // Update profile
 router.put("/", auth, async (req, res) => {
   try {
-    const { bio, city, hometown, workplace, relationship, isPublicProfile } = req.body;
+    const { firstName, lastName, bio, city, hometown, workplace, relationship, isPublicProfile } = req.body;
     const updateData = { bio, city, hometown, workplace, relationship };
+    if (firstName && firstName.trim()) updateData.firstName = firstName.trim();
+    if (lastName && lastName.trim()) updateData.lastName = lastName.trim();
     if (typeof isPublicProfile === "boolean") {
       updateData.isPublicProfile = isPublicProfile;
     }
